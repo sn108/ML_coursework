@@ -48,26 +48,40 @@ def YourAlg(
 
 
     class Bayesian_Guassian :
-        def __init__(self, kernel, noise=1e-10):
+        def __init__(self, kernel, kernel_pred, noise=1e-10):
             self.kernel = kernel    # kernel function enables us to measure correlation between data points
+            self.kernel_predict = kernel_pred
             self.noise = noise      # noise level inputted to capture uncertainty 
 
         def fit(self, x, y):        # feed input data x and output observed values y here to enable GP to measure correlation/co-variance
-            self.X_train = np.array(x)
-            self.y_train = np.array(y)
+            self.X_train = np.array(x).reshape(-1,2)
+            self.y_train = np.array(y).reshape(-1,1)
             self.K = self.kernel(self.X_train, self.X_train) + self.noise * np.eye(len(self.X_train))
             self.K_inv = np.linalg.inv(self.K)
     
         def predict(self, X):
-            K_s = self.kernel(self.X_train, np.array(X))
-            K_ss = self.kernel(np.array(X), np.array(X)) + self.noise * np.eye(len(X))
+            K_s = self.kernel_predict(self.X_train, np.array(X).reshape(-1,2))
+            K_ss = self.kernel_predict(np.array(X), np.array(X)) + self.noise
             mu_s = K_s.T.dot(self.K_inv).dot(self.y_train)
             cov_s = K_ss - K_s.T.dot(self.K_inv).dot(K_s)
             return mu_s, cov_s
         
-    def rbf_kernel(X1, X2, length_scale=1.0):
-        sqdist = np.sum(X1**2, 1).reshape(-1, 1) + np.sum(X2**2, 1) - 2 * np.dot(X1, X2.T)
-        return np.exp(-0.5 / length_scale * sqdist)
+    def gaussian_kernel_matrix(X, sigma=1):
+        distances = np.sum((X[:, np.newaxis] - X) ** 2, axis=-1)
+        kernel_matrix = np.exp(-distances / (2 * sigma ** 2))
+    
+        return kernel_matrix
+    
+    def gaussian_kernel_vector(X_sample, X, sigma=1):
+        if X.shape[0] == 1 :
+            X=np.tile(X, (X_sample.shape[0],1))
+            distance = np.sum((X_sample-X) ** 2, axis = -1)
+            kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2)).reshape(-1,1)
+        else :
+            distance = np.sum((X_sample-X) ** 2, axis = -1)
+            kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2))
+        
+        return kernel_matrix_predict
 
 
     def expected_improvement(X, X_sample, Y_sample, gp, xi=0.01):
@@ -87,15 +101,25 @@ def YourAlg(
 
     
     def propose_location(acquisition, X_sample, Y_sample, gp, bounds, n_restarts=25):
-        dim = X_sample.shape[1]
+        dim = X_sample.shape[0]
         min_val = 1
         min_x = None
 
         def min_obj(X):
             return -acquisition(X.reshape(-1, dim), X_sample, Y_sample, gp)
+        
+        starting_points = np.array([
+        [np.random.uniform(low, high) for (low, high) in bounds]
+        for _ in range(n_restarts)])
 
-        for x0 in np.random.uniform(bounds[:, 0], bounds[:, 1], size=(n_restarts, dim)):
-            res = minimize(min_obj, x0=x0, bounds=bounds, method='L-BFGS-B')
+
+        for x0 in starting_points:
+            # Constraints for the optimizer
+            cons = [{'type': 'ineq', 'fun': con1},
+                    {'type': 'ineq', 'fun': con2}]
+            
+            res = minimize(min_obj, x0=x0.flatten(), bounds=bounds, constraints=cons, method='L-BFGS-B')
+            
             if res.fun < min_val:
                 min_val = res.fun
                 min_x = res.x
@@ -103,32 +127,28 @@ def YourAlg(
         return min_x.reshape(-1, 1)
 
     # Initial samples
-    X_init = np.array(x_start)
-    Y_init = np.array(obj(X_init.reshape(2,)))
+    X_init = np.vstack((np.array(x_start),np.array([np.random.uniform(low, high) for (low, high) in bounds]).reshape(2,)))
+    Y_init = np.array([obj(X_init[0,:]),obj(X_init[1,:])])
 
     # Bounds for the search space
     bounds = bounds
 
     # Gaussian Process
-    gp = Bayesian_Guassian(kernel=rbf_kernel)
+    gp = Bayesian_Guassian(kernel=gaussian_kernel_matrix, kernel_pred=gaussian_kernel_vector)
     gp.fit(X_init, Y_init)
 
     # Bayesian Optimization loop
-    n_iter = budget
+    n_iter = budget-1
     X_sample = X_init
     Y_sample = Y_init
 
     for i in range(n_iter):
         X_next = propose_location(expected_improvement, X_sample, Y_sample, gp, bounds)
-        if con1(np.array(X_next).reshape(2,)) <= 0.12 and con2(np.array(X_next.reshape(2,))) <= 0.08:  # Check the constraint
-            Y_next = obj(np.array(X_next.reshape(2,)))
-            X_sample = np.vstack((X_sample, np.array(X_next.reshape(2,))))
-            Y_sample = np.append(Y_sample, Y_next)
-            gp.fit(X_sample, Y_sample)
-            print(f"Iteration {i+1}: X_next = {X_next.flatten()}, Y_next = {Y_next}")
-        else:
-            print(f"Iteration {i+1}: X_next = {X_next.flatten()} does not satisfy the constraint")
-            xi=xi-0.001
+        Y_next = obj(np.array(X_next))
+        X_sample = np.vstack((X_sample, np.array(X_next).reshape(1,-1)))
+        Y_sample = np.append(Y_sample, np.array([Y_next]).reshape(-1))
+        gp.fit(X_sample, Y_sample)
+        print(f"Iteration {i+1}: X_next = {X_next.flatten()}, Y_next = {Y_next}")
 
         print(f"Best location: {X_sample[np.argmin(Y_sample)]}, Best value: {np.min(Y_sample)}")
     ##############################
