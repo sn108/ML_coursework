@@ -43,6 +43,7 @@ def YourAlg(
     from scipy.stats import norm
     from scipy.optimize import minimize
     from sklearn.preprocessing import StandardScaler
+    from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
     import numpy as np
 
 
@@ -66,22 +67,22 @@ def YourAlg(
             cov_s = K_ss - K_s.T.dot(self.K_inv).dot(K_s)
             return mu_s, cov_s
         
-    def gaussian_kernel_matrix(X, sigma=1):
-        distances = np.sum((X[:, np.newaxis] - X) ** 2, axis=-1)
-        kernel_matrix = np.exp(-distances / (2 * sigma ** 2))
+    # def gaussian_kernel_matrix(X, sigma=1):
+    #     distances = np.sum((X[:, np.newaxis] - X) ** 2, axis=-1)
+    #     kernel_matrix = np.exp(-distances / (2 * sigma ** 2))
     
-        return kernel_matrix
+    #     return kernel_matrix
     
-    def gaussian_kernel_vector(X_sample, X, sigma=1):
-        if X.shape[0] == 1 :
-            X=np.tile(X, (X_sample.shape[0],1))
-            distance = np.sum((X_sample-X) ** 2, axis = -1)
-            kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2)).reshape(-1,1)
-        else :
-            distance = np.sum((X_sample-X) ** 2, axis = -1)
-            kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2))
+    # def gaussian_kernel_vector(X_sample, X, sigma=1):
+    #     if X.shape[0] == 1 :
+    #         X=np.tile(X, (X_sample.shape[0],1))
+    #         distance = np.sum((X_sample-X) ** 2, axis = -1)
+    #         kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2)).reshape(-1,1)
+    #     else :
+    #         distance = np.sum((X_sample-X) ** 2, axis = -1)
+    #         kernel_matrix_predict = np.exp(-distance / (2 * sigma ** 2))
         
-        return kernel_matrix_predict
+    #     return kernel_matrix_predict
 
 
     def expected_improvement(X, X_sample, Y_sample, gp, xi=0.01):
@@ -106,7 +107,7 @@ def YourAlg(
         min_x = None
 
         def min_obj(X):
-            return -acquisition(X.reshape(-1, dim), X_sample, Y_sample, gp)
+            return -acquisition(X.reshape(-1, 2), X_sample, Y_sample, gp)
         
         starting_points = np.array([
         [np.random.uniform(low, high) for (low, high) in bounds]
@@ -133,8 +134,12 @@ def YourAlg(
     # Bounds for the search space
     bounds = bounds
 
+    # Kernel
+
+    kernel = C(1.0, (1e-2, 1e2)) * RBF(1.0, (1e-2, 1e2))
+
     # Gaussian Process
-    gp = Bayesian_Guassian(kernel=gaussian_kernel_matrix, kernel_pred=gaussian_kernel_vector)
+    gp = Bayesian_Guassian(kernel=kernel, kernel_pred=kernel)
     gp.fit(X_init, Y_init)
 
     # Bayesian Optimization loop
