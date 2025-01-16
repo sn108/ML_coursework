@@ -127,8 +127,8 @@ def controller(x: np.array, f: callable, sp: np.array, env: callable, u_prev: np
     Returns:
     np.array: Optimal control input.
     """
-    controller.team_names = ['Bellal Ahadi', 'Shiam Shrikumar']
-    controller.cids = ['01234567', '01234567']
+    controller.team_names = ['Skibidi_Sigmas']
+    controller.cids = ['02022119', '02028380','02101922','02093393']
 
     o_space = env.env_params['o_space']
     a_space = env.env_params['a_space']
