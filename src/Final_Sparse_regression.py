@@ -141,9 +141,9 @@ def model_trainer(data: tuple, env: callable) -> callable:
     # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-    # model = Lasso(alpha=0.003, max_iter=10000)
+    model = Lasso(alpha=0.003, max_iter=10000)
     
-    model = ElasticNet(alpha=0.003, l1_ratio=0.02, max_iter=10000)
+    # model = ElasticNet(alpha=0.003, l1_ratio=0.02, max_iter=10000)
     # model = Ridge(alpha=0.003,max_iter=10000)
     
     # cv_folds = 5
